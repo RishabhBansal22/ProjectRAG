@@ -46,7 +46,7 @@ def create_rag_agent():
         # Define system prompt
         prompt = (
             "You are a helpful AI assistant with access to a document retrieval tool. "
-            "Use the tool to retrieve relevant context from indexed documents to help answer user queries. "
+            "Always Use the tool to retrieve relevant context from indexed documents to help answer user queries. "
             "Always cite the sources you use and provide accurate, contextual answers based on the retrieved information. "
             "If you cannot find relevant information, acknowledge this to the user."
         )
@@ -62,14 +62,18 @@ def create_rag_agent():
         raise
 
 
-def run_agent_query(agent, query: str, collection_name: str):
+def run_agent_query(agent, query: str, collection_name: str, conversation_history: list = None):
     """
-    Run a query through the RAG agent.
+    Run a query through the RAG agent with conversation memory.
     
     Args:
         agent: The agent instance
         query: User query string
         collection_name: Collection to search in
+        conversation_history: List of previous messages for context (optional)
+    
+    Returns:
+        Updated conversation history
     """
     try:
         logger.info(f"Processing query in collection '{collection_name}': {query}")
@@ -77,12 +81,27 @@ def run_agent_query(agent, query: str, collection_name: str):
         # Set the collection for this query
         retrieval_service.set_active_collection(collection_name)
         
-        # Stream agent responses
+        # Initialize conversation history if not provided
+        if conversation_history is None:
+            conversation_history = []
+        
+        # Add the new user query to history
+        conversation_history.append({"role": "user", "content": query})
+        
+        # Stream agent responses and collect the final response
+        final_response = None
         for event in agent.stream(
-            {"messages": [{"role": "user", "content": query}]},
+            {"messages": conversation_history},
             stream_mode="values",
         ):
             event["messages"][-1].pretty_print()
+            final_response = event["messages"][-1]
+        
+        # Add the agent's response to history
+        if final_response:
+            conversation_history.append(final_response)
+        
+        return conversation_history
             
     except Exception as e:
         logger.error(f"Error processing query: {e}")
@@ -221,12 +240,16 @@ Examples:
             run_agent_query(agent, query, collection_name)
             return
         
-        # Interactive mode
+        # Interactive mode with conversation memory
         print("\n" + "=" * 80)
-        print("💬 Interactive Chat Mode")
+        print("💬 Interactive Chat Mode (with memory)")
         print("=" * 80)
         print("Type your questions below. Type 'quit', 'exit', or 'q' to stop.")
+        print("The agent will remember your conversation context!")
         print("-" * 80)
+        
+        # Initialize conversation history
+        conversation_history = []
         
         while True:
             try:
@@ -241,11 +264,12 @@ Examples:
                 
                 print("\n🤖 Agent:")
                 print("-" * 80)
-                run_agent_query(agent, query, collection_name)
+                # Update conversation history with each query
+                conversation_history = run_agent_query(agent, query, collection_name, conversation_history)
                 print("-" * 80)
                 
             except KeyboardInterrupt:
-                print("\n\n� Chat session ended.")
+                print("\n\n👋 Chat session ended.")
                 break
         
     except KeyboardInterrupt:
