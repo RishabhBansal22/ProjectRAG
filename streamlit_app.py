@@ -39,6 +39,7 @@ st.set_page_config(
 # Custom CSS for better UI
 st.markdown("""
     <style>
+    /* Main header */
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
@@ -46,15 +47,43 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
+    
+    /* Chat message styling */
     .stChatMessage {
         padding: 1rem;
-        border-radius: 0.5rem;
+        border-radius: 0.8rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }
+    
+    /* Chat input styling */
+    .stChatInputContainer {
+        border-top: 2px solid #e0e0e0;
+        padding-top: 1rem;
+        margin-top: 1rem;
+    }
+    
+    /* Collection card */
     .collection-card {
         padding: 1rem;
         border-radius: 0.5rem;
         background-color: #f0f2f6;
         margin-bottom: 1rem;
+    }
+    
+    /* Button hover effects */
+    .stButton button {
+        transition: all 0.3s ease;
+    }
+    
+    .stButton button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        font-weight: 500;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -137,23 +166,26 @@ def index_uploaded_file(uploaded_file, file_path: str) -> Optional[str]:
         Collection name if successful, None otherwise
     """
     try:
-        # Get or create collection name
+        # Use original filename as the key, not the temp path
+        original_filename = uploaded_file.name
+        
+        # Get or create collection name using original filename
         mapper = URLCollectionMapper()
-        collection_name, is_existing = mapper.get_collection_name(file_path)
+        collection_name, is_existing = mapper.get_collection_name(original_filename)
         
         if is_existing:
-            st.info(f"📚 File already indexed in collection: **{collection_name}**")
-            mapping_info = mapper.mappings.get(file_path, {})
+            st.info(f"📚 File already indexed: **{original_filename}**")
+            mapping_info = mapper.mappings.get(original_filename, {})
             doc_count = mapping_info.get('document_count', 'unknown')
-            st.write(f"- Documents: {doc_count}")
+            st.write(f"- Chunks: {doc_count}")
             st.write(f"- Last indexed: {mapping_info.get('last_indexed', 'unknown')}")
             return collection_name
         
         # Initialize components
-        with st.spinner(f"Indexing {uploaded_file.name}..."):
+        with st.spinner(f"Indexing {original_filename}..."):
             _, _, vector_store = initialize_components(collection_name)
             
-            # Index the document
+            # Index the document using the temp file path
             doc_ids = index_documents(
                 file_path,
                 vector_store,
@@ -161,11 +193,11 @@ def index_uploaded_file(uploaded_file, file_path: str) -> Optional[str]:
                 is_directory=False
             )
             
-            # Update mapper
-            mapper.update_indexing_info(file_path, len(doc_ids))
+            # Update mapper with original filename
+            mapper.update_indexing_info(original_filename, len(doc_ids))
             
             st.success(f"✅ Successfully indexed {len(doc_ids)} document chunks!")
-            logger.info(f"Indexed {uploaded_file.name}: {len(doc_ids)} chunks in {collection_name}")
+            logger.info(f"Indexed {original_filename}: {len(doc_ids)} chunks in {collection_name}")
             
         return collection_name
         
@@ -177,14 +209,16 @@ def index_uploaded_file(uploaded_file, file_path: str) -> Optional[str]:
 
 def display_collections_sidebar():
     """Display indexed collections in the sidebar."""
-    st.sidebar.header("📚 Indexed Collections")
+    st.sidebar.header("📚 My Documents")
     
     mapper = URLCollectionMapper()
     mappings = mapper.list_all_mappings()
     
     if not mappings:
-        st.sidebar.info("No documents indexed yet. Upload a file to get started!")
+        st.sidebar.info("📝 No documents yet.\n\nUpload one to get started!")
         return
+    
+    st.sidebar.caption(f"Total: {len(mappings)} document(s)")
     
     for idx, (path, info) in enumerate(mappings.items()):
         collection_name = info['collection_name']
@@ -194,46 +228,64 @@ def display_collections_sidebar():
         filename = Path(path).name
         file_stem = Path(path).stem  # filename without extension
         
+        # Check if this is the active collection
+        is_active = st.session_state.active_collection == collection_name
+        
         # Display collection info with clear filename
-        with st.sidebar.expander(f"📄 {filename}", expanded=False):
-            st.write(f"**File:** {filename}")
-            st.write(f"**Chunks:** {doc_count}")
-            st.write(f"**Indexed:** {info.get('last_indexed', 'N/A')[:10]}")
+        with st.sidebar.expander(f"{'✅ ' if is_active else '📄 '}{filename}", expanded=is_active):
+            st.markdown(f"**📄 File:** {filename}")
+            st.markdown(f"**🔢 Chunks:** {doc_count}")
+            st.markdown(f"**📅 Indexed:** {info.get('last_indexed', 'N/A')[:10]}")
             
             # Button to activate collection
-            if st.button(f"📂 Select Document", key=f"use_{idx}", type="primary"):
-                st.session_state.active_collection = collection_name
-                retrieval_service.set_active_collection(collection_name)
-                st.success(f"✅ Now chatting with: **{filename}**")
-                st.rerun()
+            if not is_active:
+                if st.button("📂 Chat with this", key=f"use_{idx}", type="primary", use_container_width=True):
+                    st.session_state.active_collection = collection_name
+                    retrieval_service.set_active_collection(collection_name)
+                    st.rerun()
+            else:
+                st.success("Currently active")
     
-    # Display active collection with friendly name
+    st.sidebar.divider()
+    
+    # Display active collection status
     if st.session_state.active_collection:
         active_friendly_name = get_friendly_collection_name(st.session_state.active_collection)
-        st.sidebar.success(f"✅ Active: **{active_friendly_name}**")
+        st.sidebar.success(f"💬 Active: **{active_friendly_name}**")
     else:
-        st.sidebar.warning("⚠️ No document selected")
+        st.sidebar.info("💡 Select a document to start chatting")
 
 
 def handle_file_upload():
     """Handle file upload section."""
-    st.header("📁 Upload Document")
+    # Styled header
+    st.markdown("""
+    <div style="background-color: #f0f7ff; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        <h3 style="margin: 0; color: #1f77b4;">📁 Upload Document</h3>
+        <p style="margin: 0.5rem 0 0 0; color: #555;">Upload a PDF or TXT file to index and chat with it</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     uploaded_file = st.file_uploader(
-        "Choose a file (PDF or TXT)",
+        "Choose a file",
         type=['pdf', 'txt'],
-        help="Upload a document to index it into the vector database"
+        help="Upload a document to index it into the vector database",
+        label_visibility="collapsed"
     )
     
     if uploaded_file is not None:
-        col1, col2 = st.columns([3, 1])
+        # Display file info in a nice card
+        st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #1f77b4; margin-bottom: 1rem;">
+            <h4 style="margin: 0 0 0.5rem 0;">📄 {uploaded_file.name}</h4>
+            <p style="margin: 0; color: #666;">Size: {uploaded_file.size / 1024:.2f} KB</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col1:
-            st.write(f"**Filename:** {uploaded_file.name}")
-            st.write(f"**Size:** {uploaded_file.size / 1024:.2f} KB")
-        
+        # Center the button
+        col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("📥 Index Document", type="primary"):
+            if st.button("📥 Index Document", type="primary", use_container_width=True):
                 # Save uploaded file temporarily
                 with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
@@ -256,6 +308,16 @@ def handle_file_upload():
                         os.unlink(tmp_path)
                     except:
                         pass
+    else:
+        # Show instructions when no file is uploaded
+        st.info("👆 Choose a file to get started")
+        st.markdown("""
+        ### 📋 Instructions
+        1. Click the **Browse files** button above
+        2. Select a PDF or TXT document
+        3. Click **Index Document** to process it
+        4. Start chatting in the **Chat** tab!
+        """)
 
 
 def run_chat_query(query: str):
@@ -331,52 +393,73 @@ def run_chat_query(query: str):
 
 def display_chat_interface():
     """Display the chat interface."""
-    st.header("💬 Chat with Your Documents")
-    
     # Check if a collection is active
     if not st.session_state.active_collection:
-        st.info("👆 Please upload a document or select an indexed collection from the sidebar to start chatting.")
+        st.info("👆 Please upload a document or select a document from the sidebar to start chatting.")
+        st.markdown("### 🚀 Getting Started")
+        st.markdown("""
+        1. **Upload a document** in the 📁 Upload tab, or
+        2. **Select an indexed document** from the sidebar
+        3. Start asking questions about your documents!
+        """)
         return
     
     # Display friendly name instead of collection name
     friendly_name = get_friendly_collection_name(st.session_state.active_collection)
-    st.success(f"🎯 Chatting with: **{friendly_name}**")
     
-    # Display chat history
-    for message in st.session_state.conversation_history:
-        # Handle both dictionary and LangChain message objects
-        if isinstance(message, dict):
-            role = message.get("role", "assistant")
-            content = message.get("content", "")
-        else:
-            # LangChain message object
-            role = getattr(message, 'type', 'assistant')
-            if role == 'ai':
-                role = 'assistant'
-            elif role == 'human':
-                role = 'user'
-            content = getattr(message, 'content', '')
-        
-        # Handle different content types
-        if isinstance(content, str):
-            display_content = content
-        elif isinstance(content, list):
-            # Handle content blocks
-            display_content = ""
-            for block in content:
-                if isinstance(block, dict) and 'text' in block:
-                    display_content += block['text']
-                elif isinstance(block, str):
-                    display_content += block
-        else:
-            display_content = str(content)
-        
-        with st.chat_message(role):
-            st.markdown(display_content)
+    # Header with document info
+    st.markdown(f"""
+    <div style="background-color: #e8f4f8; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        <h3 style="margin: 0; color: #1f77b4;">💬 Chat with Your Documents</h3>
+        <p style="margin: 0.5rem 0 0 0; color: #555;">📄 Currently chatting with: <strong>{friendly_name}</strong></p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Chat input
-    if prompt := st.chat_input("Ask a question about your documents..."):
-        run_chat_query(prompt)
+    # Chat input at the top for better UX
+    user_query = st.chat_input("Ask a question about your documents...", key="chat_input_top")
+    
+    # Container for chat messages
+    chat_container = st.container()
+    
+    with chat_container:
+        # Display chat history
+        if not st.session_state.conversation_history:
+            st.info("👋 Start a conversation! Ask me anything about the document.")
+        else:
+            for message in st.session_state.conversation_history:
+                # Handle both dictionary and LangChain message objects
+                if isinstance(message, dict):
+                    role = message.get("role", "assistant")
+                    content = message.get("content", "")
+                else:
+                    # LangChain message object
+                    role = getattr(message, 'type', 'assistant')
+                    if role == 'ai':
+                        role = 'assistant'
+                    elif role == 'human':
+                        role = 'user'
+                    content = getattr(message, 'content', '')
+                
+                # Handle different content types
+                if isinstance(content, str):
+                    display_content = content
+                elif isinstance(content, list):
+                    # Handle content blocks
+                    display_content = ""
+                    for block in content:
+                        if isinstance(block, dict) and 'text' in block:
+                            display_content += block['text']
+                        elif isinstance(block, str):
+                            display_content += block
+                else:
+                    display_content = str(content)
+                
+                with st.chat_message(role):
+                    st.markdown(display_content)
+    
+    # Process user query if submitted
+    if user_query:
+        run_chat_query(user_query)
 
 
 def display_url_collections_db():
