@@ -9,3 +9,6 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# URL collection mappings
+url_collections.json
