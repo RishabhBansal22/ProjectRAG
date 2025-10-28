@@ -10,5 +10,21 @@ wheels/
 .venv
 .env
 
-# URL collection mappings
+# Document collection mappings
 url_collections.json
+
+# User documents (keep sample.txt for demo)
+documents/*
+!documents/sample.txt
+!documents/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

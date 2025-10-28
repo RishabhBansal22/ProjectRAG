@@ -1,45 +1,45 @@
 # RAG-Based LangChain Agent
 
-A production-ready Retrieval-Augmented Generation (RAG) system built with LangChain, Google Gemini, and Qdrant vector database. This agent can index web documents and answer questions by retrieving relevant context from the indexed knowledge base.
+A production-ready Retrieval-Augmented Generation (RAG) system built with LangChain, Google Gemini, and Qdrant vector database. This agent can index local documents (PDF and TXT files) and answer questions by retrieving relevant context from the indexed knowledge base.
 
-## Features
+## ✨ Key Features
 
-- 🚀 **Document Indexing**: Load and index web documents into a vector database
+- � **Document Indexing**: Load and index PDF and TXT documents into a vector database
 - 🤖 **Intelligent Agent**: LangChain agent with RAG capabilities using Google Gemini
 - 🔍 **Semantic Search**: Efficient similarity search using Qdrant vector database
+- 📁 **Directory Support**: Index entire directories of documents at once
 - ⚙️ **Configurable**: Centralized configuration management
 - 📝 **Comprehensive Logging**: Detailed logging for debugging and monitoring
 - 🛡️ **Error Handling**: Robust error handling throughout the application
 - 🎯 **Type Hints**: Full type annotations for better code quality
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 rag-project/
+├── documents/            # Place your documents here
+│   └── sample.txt       # Sample text file
 ├── agent/
-│   ├── document.py       # Document loading and text splitting
-│   ├── index_docs.py     # Document indexing pipeline
-│   └── main.py          # Main RAG agent application
+│   ├── document.py      # Document loading (PDF, TXT) and text splitting
+│   ├── index_docs.py    # Document indexing pipeline
+│   └── main.py         # Main RAG agent application
 ├── lang_comps/
-│   └── components.py     # LangChain components (chat, embeddings, vector store)
+│   └── components.py    # LangChain components (chat, embeddings, vector store)
 ├── qdrant/
-│   └── client.py        # Qdrant client wrapper
+│   └── client.py       # Qdrant client wrapper
 ├── tools/
-│   ├── __init__.py
-│   └── retrival.py      # Retrieval tool for the agent
-├── config.py            # Centralized configuration
-├── pyproject.toml       # Project dependencies
-├── .env.example         # Example environment variables
-└── README.md           # This file
+│   └── retrival.py     # Retrieval tool for the agent
+├── config.py           # Centralized configuration
+└── DOCUMENT_SYSTEM.md  # Detailed documentation for document system
 ```
 
-## Prerequisites
+## 📋 Prerequisites
 
 - Python 3.10+
 - Google API key (for Gemini models)
 - Qdrant cloud account or local instance
 
-## Installation
+## 🚀 Installation
 
 1. **Clone the repository**:
    ```bash
@@ -68,25 +68,41 @@ rag-project/
    QDRANT_URL=your_qdrant_url
    ```
 
-## Usage
+## 📚 Usage
 
-### 1. Index Documents
+### 1. Prepare Your Documents
 
-First, index documents into the vector database:
+Place your PDF or TXT files in the `documents/` directory:
 
 ```bash
-uv run agent/index_docs.py
+documents/
+├── sample.txt
+├── research_paper.pdf
+└── notes.txt
 ```
 
-This will:
-- Load a web document (default: LLM Agent blog post)
-- Split it into chunks
-- Create embeddings
-- Store in Qdrant vector database
+### 2. Index Documents
 
-To index custom URLs, modify the `url` variable in `agent/index_docs.py` or extend the `main()` function.
+**Index a single file**:
+```bash
+# Index a text file
+uv run agent/index_docs.py documents/sample.txt
 
-### 2. Run the RAG Agent
+# Index a PDF file
+uv run agent/index_docs.py documents/research_paper.pdf
+```
+
+**Index all documents in a directory**:
+```bash
+uv run agent/index_docs.py documents/ --directory
+```
+
+**List all indexed documents**:
+```bash
+uv run agent/index_docs.py --list
+```
+
+### 3. Run the RAG Agent
 
 Once documents are indexed, run the agent:
 
@@ -99,36 +115,45 @@ The agent will:
 - Use the retrieval tool to search indexed documents
 - Answer queries based on retrieved context
 
-### 3. Customize Queries
+### 4. Test Retrieval
 
-Edit `agent/main.py` to modify the query:
+Test document retrieval with sample queries:
 
-```python
-query = "Your custom question here"
-run_agent_query(agent, query)
+```bash
+uv run test_retrieval.py
 ```
 
-## Configuration
+## 📖 Supported File Types
+
+- **PDF files** (.pdf) - Using LangChain's PyPDFLoader
+- **Text files** (.txt) - Using LangChain's TextLoader
+
+## ⚙️ Configuration
 
 All configuration is managed in `config.py`. You can customize:
 
 - **Model Settings**: Chat and embedding models
 - **Vector Store**: Collection name, distance metric
 - **Document Processing**: Chunk size and overlap
+  - `CHUNK_SIZE = 1000` (characters per chunk)
+  - `CHUNK_OVERLAP = 200` (overlap between chunks)
 - **Retrieval**: Number of results to retrieve (top-k)
+- **Batch Size**: Documents processed per batch during indexing
 
 Environment variables in `.env` override defaults in `config.py`.
 
-## Project Components
+## 🔧 Project Components
 
 ### Document Processing (`agent/document.py`)
-- `load_web_document()`: Loads web pages and extracts content
+- `load_document()`: Loads single PDF or TXT files
+- `load_documents_from_directory()`: Loads all supported files from a directory
 - `split_documents()`: Splits documents into chunks for indexing
 
 ### Indexing Pipeline (`agent/index_docs.py`)
 - `initialize_components()`: Sets up embeddings, vector store, and database
-- `index_documents()`: Indexes documents from URLs
-- `main()`: Entry point for indexing
+- `index_documents()`: Indexes documents from files or directories
+- Supports batch processing for better performance
+- Multi-threaded directory loading
 
 ### RAG Agent (`agent/main.py`)
 - `create_rag_agent()`: Creates the LangChain agent with tools
@@ -144,86 +169,21 @@ Environment variables in `.env` override defaults in `config.py`.
 - `RetrievalService`: Singleton service for managing retrieval
 - `retrieve_context()`: LangChain tool for document retrieval
 
-### Qdrant Client (`qdrant/client.py`)
-- `QdrantClientWrapper`: Enhanced Qdrant client with collection management
+## 🐛 Troubleshooting
 
-## Error Handling
+### "0 documents indexed" Issue
+**Cause**: Document content is empty or not being loaded correctly
 
-The project includes comprehensive error handling:
-- Configuration validation
-- API key validation
-- Database connection errors
-- Document loading failures
-- Retrieval errors
-
-All errors are logged with detailed messages for debugging.
-
-## Logging
-
-Logging is configured at the INFO level by default. Logs include:
-- Component initialization
-- Document processing progress
-- Query execution
-- Error details
-
-To change log level, modify the `logging.basicConfig()` calls in the main scripts.
-
-## Development
-
-### Adding New Document Sources
-
-Extend `agent/document.py` with new loaders:
-
-```python
-def load_pdf_document(file_path: str) -> List[Document]:
-    """Load PDF documents."""
-    # Implementation
-    pass
-```
-
-### Adding New Tools
-
-Create new tools in `tools/`:
-
-```python
-from langchain.tools import tool
-
-@tool
-def your_custom_tool(input: str) -> str:
-    """Tool description."""
-    # Implementation
-    pass
-```
-
-Register in `agent/main.py`:
-
-```python
-tools = [retrieve_context, your_custom_tool]
-```
-
-### Customizing the Agent
-
-Modify the system prompt in `agent/main.py` to change agent behavior:
-
-```python
-prompt = "Your custom system prompt here"
-```
-
-## Best Practices
-
-1. **Always index documents before running the agent**
-2. **Keep your API keys secure** - never commit `.env` files
-3. **Monitor token usage** - embedding and chat API calls consume tokens
-4. **Adjust chunk size** based on your document type and use case
-5. **Use appropriate top-k values** - balance between context and relevance
-
-## Troubleshooting
+**Solutions**:
+1. **Check file content**: Ensure PDF files contain text (not just images)
+2. **Check file encoding**: For TXT files, ensure UTF-8 encoding
+3. **Use directory mode**: `uv run agent/index_docs.py documents/ --directory`
 
 ### Collection Not Found Error
 ```
 ValueError: Collection 'rag_documents' not found
 ```
-**Solution**: Run `uv run agent/index_docs.py` to create and populate the collection.
+**Solution**: Run `uv run agent/index_docs.py documents/sample.txt` to create and populate the collection.
 
 ### API Key Errors
 ```
@@ -231,23 +191,49 @@ ValueError: Missing required environment variables: GOOGLE_API_KEY
 ```
 **Solution**: Ensure your `.env` file has all required keys set.
 
-### Import Errors
+### File Not Found
 ```
-ModuleNotFoundError: No module named 'langchain'
+ValueError: File not found: documents/myfile.pdf
 ```
-**Solution**: Install dependencies with `uv sync` or `pip install -e .`
+**Solution**: Check the file path and ensure the file exists.
 
-## Performance Optimization
+## 📊 Performance Optimization
 
-- **Batch Indexing**: Index multiple documents in batches
-- **Caching**: Implement embedding caching for frequently used queries
-- **Async Operations**: Use async methods for concurrent operations
-- **Collection Management**: Regularly optimize vector collections
+- **Batch Processing**: Documents are indexed in configurable batches (default: 10)
+- **Multi-threading**: Directory loading uses multiple threads
+- **Progress Indicators**: Real-time feedback during directory indexing
+- **Retry Logic**: Automatic retry with exponential backoff for failed batches
 
-## Future Enhancements
+## 🎯 Best Practices
 
-- [ ] Support for multiple document formats (PDF, DOCX, etc.)
-- [ ] Batch document indexing
+1. **Always index documents before running the agent**
+2. **Keep your API keys secure** - never commit `.env` files
+3. **Monitor token usage** - embedding and chat API calls consume tokens
+4. **Adjust chunk size** based on your document type and use case
+5. **Use appropriate top-k values** - balance between context and relevance
+6. **Organize documents** - Use descriptive filenames and directory structure
+
+## 🔄 Migration from Web-Based System
+
+The system has been updated from web-based to document-based:
+
+| Feature | Old (Web) | New (Documents) |
+|---------|-----------|-----------------|
+| Input | URLs | File paths |
+| Supported | HTML | PDF, TXT |
+| Loader | WebBaseLoader | PyPDFLoader, TextLoader |
+| Filtering | BeautifulSoup | Direct content |
+| Issues | Anti-bot protection | Local file access |
+
+## 📚 Documentation
+
+- **[DOCUMENT_SYSTEM.md](DOCUMENT_SYSTEM.md)** - Comprehensive guide to the document system
+- **[SIMPLE_WORKFLOW.md](SIMPLE_WORKFLOW.md)** - Quick start workflow
+
+## 🚧 Future Enhancements
+
+- [ ] Support for more document formats (DOCX, Markdown, CSV)
+- [ ] OCR support for scanned PDFs
 - [ ] Conversation memory
 - [ ] Multiple vector store backends
 - [ ] Web interface
@@ -255,14 +241,18 @@ ModuleNotFoundError: No module named 'langchain'
 - [ ] Advanced query preprocessing
 - [ ] Result caching
 
-## License
+## 📄 License
 
 [Add your license here]
 
-## Contributing
+## 🤝 Contributing
 
 [Add contribution guidelines here]
 
-## Support
+## 💬 Support
 
 For issues and questions, please open an issue in the repository.
+
+---
+
+**Note**: For detailed information about the document loading system, see [DOCUMENT_SYSTEM.md](DOCUMENT_SYSTEM.md).

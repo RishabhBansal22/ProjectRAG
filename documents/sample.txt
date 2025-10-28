@@ -1,0 +1,28 @@
+Sample Document for RAG System
+
+This is a sample text document to test the document-based retrieval system.
+
+Introduction:
+This document contains information about various topics that can be indexed
+and retrieved using the RAG (Retrieval-Augmented Generation) system.
+
+Section 1: Machine Learning
+Machine learning is a subset of artificial intelligence that focuses on the 
+development of algorithms that can learn from and make predictions or decisions 
+based on data. It encompasses various techniques including supervised learning,
+unsupervised learning, and reinforcement learning.
+
+Section 2: Natural Language Processing
+Natural Language Processing (NLP) is a field of artificial intelligence that 
+focuses on the interaction between computers and human language. It involves
+teaching computers to understand, interpret, and generate human language in
+a valuable way.
+
+Section 3: Vector Databases
+Vector databases are specialized database systems designed to store and query
+high-dimensional vector embeddings. They are essential for semantic search,
+recommendation systems, and retrieval-augmented generation applications.
+
+Conclusion:
+This sample document demonstrates the basic structure and content that can be
+processed by the document loading and indexing pipeline.
