@@ -89,25 +89,25 @@ def run_agent_query(agent, query: str, collection_name: str):
         raise
 
 
-def ensure_collection_ready(url: str) -> str:
+def ensure_collection_ready(file_path: str) -> str:
     """
-    Ensure collection exists for URL, indexing if necessary.
+    Ensure collection exists for file/directory, indexing if necessary.
     
     Args:
-        url: URL to index/retrieve
+        file_path: Path to file or directory to index/retrieve
         
     Returns:
         Collection name to use
     """
     mapper = URLCollectionMapper()
-    collection_name, is_existing = mapper.get_collection_name(url)
+    collection_name, is_existing = mapper.get_collection_name(file_path)
     
     if is_existing:
-        logger.info(f"✅ Found existing collection for URL: {collection_name}")
+        logger.info(f"✅ Found existing collection for path: {collection_name}")
         print(f"\n✅ Using existing collection: {collection_name}")
         
         # Get document count
-        mapping_info = mapper.mappings.get(url, {})
+        mapping_info = mapper.mappings.get(file_path, {})
         doc_count = mapping_info.get('document_count', 'unknown')
         last_indexed = mapping_info.get('last_indexed', 'unknown')
         print(f"   Documents: {doc_count}")
@@ -115,24 +115,33 @@ def ensure_collection_ready(url: str) -> str:
         
         return collection_name
     
-    # Need to index this URL
-    logger.info(f"📥 Collection not found. Indexing URL: {url}")
-    print(f"\n📥 This URL hasn't been indexed yet. Indexing now...")
+    # Need to index this path
+    logger.info(f"📥 Collection not found. Indexing path: {file_path}")
+    print(f"\n📥 This path hasn't been indexed yet. Indexing now...")
     print(f"   Collection: {collection_name}")
     
     try:
+        # Validate path exists
+        from pathlib import Path
+        path = Path(file_path)
+        if not path.exists():
+            raise ValueError(f"Path does not exist: {file_path}")
+        
+        is_directory = path.is_dir()
+        
         # Initialize components
         _, _, vector_store = initialize_components(collection_name)
         
         # Index documents
         doc_ids = index_documents(
-            url, 
+            file_path, 
             vector_store,
-            batch_size=config.BATCH_SIZE
+            batch_size=config.BATCH_SIZE,
+            is_directory=is_directory
         )
         
         # Update mapper
-        mapper.update_indexing_info(url, len(doc_ids))
+        mapper.update_indexing_info(file_path, len(doc_ids))
         
         print(f"\n✅ Indexing completed! {len(doc_ids)} documents indexed.")
         logger.info(f"Successfully indexed {len(doc_ids)} documents")
@@ -140,8 +149,8 @@ def ensure_collection_ready(url: str) -> str:
         return collection_name
         
     except Exception as e:
-        logger.error(f"Failed to index URL: {e}")
-        print(f"\n❌ Failed to index URL: {e}")
+        logger.error(f"Failed to index path: {e}")
+        print(f"\n❌ Failed to index path: {e}")
         raise
 
 
@@ -153,16 +162,22 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Start chat session with a URL
-  python agent/main.py https://example.com/article
+  # Start chat session with a document
+  python agent/main.py documents/sample.txt
+  
+  # Start chat with a PDF
+  python agent/main.py documents/research.pdf
   
   # Direct query
-  python agent/main.py https://example.com/article --query "What is this about?"
+  python agent/main.py documents/sample.txt --query "What is this about?"
+  
+  # Chat with all documents in a directory
+  python agent/main.py documents/ --query "Summarize the content"
         """
     )
     parser.add_argument(
-        'url',
-        help='URL of the document to chat about'
+        'path',
+        help='Path to the document file or directory to chat about'
     )
     parser.add_argument(
         '--query',
@@ -172,19 +187,27 @@ Examples:
     )
     
     args = parser.parse_args()
-    url = args.url
+    file_path = args.path
     
     try:
         print("=" * 80)
         print("🤖 RAG Agent - Document Q&A System")
         print("=" * 80)
-        print(f"\n📄 URL: {url}")
+        print(f"\n📄 Document: {file_path}")
         
         # Validate configuration
         config.validate()
         
+        # Validate path exists
+        from pathlib import Path
+        path = Path(file_path)
+        if not path.exists():
+            print(f"\n❌ Error: Path does not exist: {file_path}")
+            print("Please provide a valid file or directory path.")
+            sys.exit(1)
+        
         # Ensure collection is ready (index if needed)
-        collection_name = ensure_collection_ready(url)
+        collection_name = ensure_collection_ready(file_path)
         
         # Create agent
         print("\n🔧 Initializing agent...")

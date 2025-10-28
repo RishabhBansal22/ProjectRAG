@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agent.document import load_web_document, split_documents
+from agent.document import load_document, load_documents_from_directory, split_documents
 from qdrant.client import QdrantClientWrapper
 from lang_comps.components import VectorStore, GoogleEmbedding
 from config import config
@@ -75,14 +75,15 @@ def initialize_components(collection_name: str):
         raise
 
 
-def index_documents(url: str, vector_store, batch_size: int = 10) -> List[str]:
+def index_documents(file_path: str, vector_store, batch_size: int = 10, is_directory: bool = False) -> List[str]:
     """
-    Index documents from a URL into the vector store with batching.
+    Index documents from a file or directory into the vector store with batching.
     
     Args:
-        url: URL of the document to index
+        file_path: Path to the document file or directory
         vector_store: Vector store instance
         batch_size: Number of documents to index per batch (default: 10)
+        is_directory: If True, load all supported files from directory
         
     Returns:
         List of document IDs
@@ -91,10 +92,15 @@ def index_documents(url: str, vector_store, batch_size: int = 10) -> List[str]:
         Exception: If indexing fails
     """
     try:
-        logger.info(f"Starting document indexing from {url}")
+        logger.info(f"Starting document indexing from {file_path}")
         
-        # Load and split documents
-        docs = load_web_document(url)
+        # Load documents based on type
+        if is_directory:
+            docs = load_documents_from_directory(file_path)
+        else:
+            docs = load_document(file_path)
+        
+        # Split documents into chunks
         splits = split_documents(
             docs,
             chunk_size=config.CHUNK_SIZE,
@@ -150,24 +156,35 @@ def main():
     """Main function to run document indexing."""
     # Set up argument parser
     parser = argparse.ArgumentParser(
-        description='Index web documents into Qdrant vector database',
+        description='Index documents (PDF, TXT) into Qdrant vector database',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Index a single URL
-  python agent/index_docs.py https://example.com/article
+  # Index a single PDF file
+  python agent/index_docs.py path/to/document.pdf
+  
+  # Index a single text file
+  python agent/index_docs.py path/to/document.txt
+  
+  # Index all documents in a directory
+  python agent/index_docs.py path/to/documents/ --directory
   
   # Index with custom batch size
-  python agent/index_docs.py https://example.com/article --batch-size 5
+  python agent/index_docs.py path/to/document.pdf --batch-size 5
   
-  # List all indexed URLs
+  # List all indexed documents
   python agent/index_docs.py --list
         """
     )
     parser.add_argument(
-        'url',
+        'path',
         nargs='?',
-        help='URL of the web page to index'
+        help='Path to the document file or directory'
+    )
+    parser.add_argument(
+        '--directory',
+        action='store_true',
+        help='Treat path as a directory and index all supported files (PDF, TXT)'
     )
     parser.add_argument(
         '--batch-size',
@@ -178,30 +195,30 @@ Examples:
     parser.add_argument(
         '--list',
         action='store_true',
-        help='List all indexed URLs and their collections'
+        help='List all indexed documents and their collections'
     )
     parser.add_argument(
         '--reindex',
         action='store_true',
-        help='Force reindexing even if URL was previously indexed'
+        help='Force reindexing even if file was previously indexed'
     )
     
     args = parser.parse_args()
     
-    # Initialize URL mapper
+    # Initialize mapper
     mapper = URLCollectionMapper()
     
     # Handle list command
     if args.list:
         mappings = mapper.list_all_mappings()
         if not mappings:
-            print("No URLs have been indexed yet.")
+            print("No documents have been indexed yet.")
             return
         
-        print("\n📚 Indexed URLs and Collections:")
+        print("\n📚 Indexed Documents and Collections:")
         print("=" * 80)
-        for url, info in mappings.items():
-            print(f"\nURL: {url}")
+        for path, info in mappings.items():
+            print(f"\nPath: {path}")
             print(f"  Collection: {info['collection_name']}")
             print(f"  Documents: {info['document_count']}")
             print(f"  Created: {info['created_at']}")
@@ -209,19 +226,34 @@ Examples:
         print("=" * 80)
         return
     
-    # Require URL if not listing
-    if not args.url:
+    # Require path if not listing
+    if not args.path:
         parser.print_help()
         sys.exit(1)
     
-    url = args.url
+    file_path = args.path
     
     try:
-        # Get or create collection for this URL
-        collection_name, is_existing = mapper.get_collection_name(url)
+        # Validate path exists
+        path = Path(file_path)
+        if not path.exists():
+            logger.error(f"Path does not exist: {file_path}")
+            sys.exit(1)
+        
+        # Check if it's a directory or file
+        if args.directory and not path.is_dir():
+            logger.error(f"--directory flag used but path is not a directory: {file_path}")
+            sys.exit(1)
+        
+        if not args.directory and path.is_dir():
+            logger.error(f"Path is a directory. Use --directory flag to index all files.")
+            sys.exit(1)
+        
+        # Get or create collection for this path
+        collection_name, is_existing = mapper.get_collection_name(file_path)
         
         if is_existing and not args.reindex:
-            logger.info(f"URL '{url}' was previously indexed in collection '{collection_name}'")
+            logger.info(f"Path '{file_path}' was previously indexed in collection '{collection_name}'")
             response = input("Do you want to reindex? This will add new documents. (y/N): ")
             if response.lower() != 'y':
                 logger.info("Indexing cancelled.")
@@ -232,18 +264,20 @@ Examples:
         # Initialize components with the collection name
         _, _, vector_store = initialize_components(collection_name)
         
-        # Index documents from URL
+        # Index documents from file or directory
         doc_ids = index_documents(
-            url, 
+            file_path,
             vector_store,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            is_directory=args.directory
         )
         
         # Update mapper with indexing info
-        mapper.update_indexing_info(url, len(doc_ids))
+        mapper.update_indexing_info(file_path, len(doc_ids))
         
         logger.info(f"✅ Indexing completed successfully!")
-        logger.info(f"   URL: {url}")
+        logger.info(f"   Path: {file_path}")
+        logger.info(f"   Type: {'Directory' if args.directory else 'File'}")
         logger.info(f"   Collection: {collection_name}")
         logger.info(f"   Total documents: {len(doc_ids)}")
         

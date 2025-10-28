@@ -1,5 +1,4 @@
 # Core dependencies for RAG project
-bs4>=0.0.2
 langchain>=1.0.2
 langchain-community>=0.4.1
 langchain-google-genai>=3.0.0
@@ -7,3 +6,6 @@ langchain-qdrant>=1.1.0
 langchain-text-splitters>=1.0.0
 python-dotenv>=1.2.1
 qdrant-client>=1.15.1
+
+# Document loading dependencies
+pypdf>=5.1.0  # For PDF document loading
