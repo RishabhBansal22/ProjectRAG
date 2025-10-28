@@ -56,7 +56,7 @@ class URLCollectionMapper:
         Returns:
             A valid Qdrant collection name
         """
-        # Create a hash of the path/URL
+        # Create a hash of the path/URL for uniqueness
         path_hash = hashlib.md5(path_or_url.encode()).hexdigest()[:8]
         
         # Try to extract a meaningful name from the path
@@ -69,16 +69,19 @@ class URLCollectionMapper:
                 name_part = path_obj.name or "docs"
             else:
                 name_part = path_obj.stem
+            # Clean the name: replace special chars with underscores
             name_part = name_part.replace('.', '_').replace('-', '_').replace(' ', '_')
+            # Limit length for readability
+            name_part = name_part[:50]
         except Exception:
             # Fallback: use hash only if path parsing fails
-            name_part = ""
+            name_part = "document"
         
-        # Create collection name
-        if name_part:
-            collection_name = f"rag_{name_part}_{path_hash}"
-        else:
-            collection_name = f"rag__{path_hash}"
+        # Add timestamp for better tracking (optional, but helps identify when indexed)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create collection name with format: rag_{filename}_{timestamp}_{hash}
+        collection_name = f"rag_{name_part}_{timestamp}_{path_hash}"
         
         # Ensure it's valid (max 255 chars, only allowed characters)
         collection_name = ''.join(c if c.isalnum() or c == '_' else '_' for c in collection_name)
